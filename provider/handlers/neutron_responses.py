@@ -28,7 +28,7 @@ from handlers.base_handler import Response
 from handlers.responses_utils import get_entity
 from handlers.selecting_handler import rest
 from ovirt_provider_config_common import neutron_url_with_version
-
+from handlers.custom_utils import custom_ports
 
 NETWORK_ID = 'network_id'
 PORT_ID = 'port_id'
@@ -142,6 +142,7 @@ def post_networks(nb_db, content, parameters):
 
 
 @rest(POST, PORTS, _responses)
+@custom_ports
 def post_ports(nb_db, content, parameters):
     received_port = get_entity(content, 'port')
     port = nb_db.add_port(received_port)
@@ -163,6 +164,7 @@ def put_network(nb_db, content, parameters):
 
 
 @rest(PUT, PORT_ENTITY, _responses)
+@custom_ports
 def put_ports(nb_db, content, parameters):
     received_port = get_entity(content, 'port')
     port = nb_db.update_port(received_port, parameters[PORT_ID])

@@ -28,6 +28,7 @@ import ovn_connection
 import constants as ovnconst
 import neutron.ip as ip_utils
 import neutron.validation as validate
+import logging
 
 from handlers.base_handler import BadRequestError
 from handlers.base_handler import ElementNotFoundError
@@ -319,7 +320,6 @@ class NeutronApi(object):
     def _get_network_port(self, lsp, ls=None):
         if ls is None:
             ls = self._get_port_network(lsp)
-        # ICDC Fix: https://github.com/oVirt/ovirt-provider-ovn/commit/aef7600fd2dac32b40ca64fac5794703ee437938
         dhcp_options = self._get_dhcp(lsp, ls)
         lrp_name = lsp.options.get(ovnconst.LSP_OPTION_ROUTER_PORT)
         lrp = self.ovn_north.get_lrp(lrp_name=lrp_name) if lrp_name else None
@@ -497,7 +497,7 @@ class NeutronApi(object):
         if mac:
             if subnet:
                 self.update_port_subnet(db_set_command, subnet, ip_version)
-                mac += ' ' + self._get_port_addesses_suffix(
+                mac += ' ' + self._get_port_addesses_suffix(port_id,
                     network_id, fixed_ips)
             else:
                 self.ovn_north.clear_row_column(
@@ -544,7 +544,7 @@ class NeutronApi(object):
         if cmd:
             transaction.add(cmd)
 
-    def _get_port_addesses_suffix(self, network_id, fixed_ips):
+    def _get_port_addesses_suffix(self, port_id, network_id, fixed_ips):
         if not fixed_ips:
             return ovnconst.LSP_ADDRESS_TYPE_DYNAMIC
 
@@ -556,6 +556,14 @@ class NeutronApi(object):
         ip = fixed_ip.get(PortMapper.REST_PORT_IP_ADDRESS)
         if not ip:
             return ovnconst.LSP_ADDRESS_TYPE_DYNAMIC
+        ### ICDC BEGIN
+        # Check if IP is already set, we do not need to validate
+        # Because validation checks all ports and do not take into account port_id
+        port = self.ovn_north.get_lsp(ovirt_lsp_id=port_id)
+        if port.addresses and ip in port.addresses[0]:
+            logging.info("Port: {}".format(port.addresses[0]))
+            return ip
+        ### ICDC END
         validate.ip_available_in_network(
             self.ovn_north.get_ls(ls_id=network_id), ip
         )
