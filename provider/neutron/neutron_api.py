@@ -297,12 +297,13 @@ class NeutronApi(object):
                 return lsp
         return None
 
+    # ICDC FIX: https://github.com/oVirt/ovirt-provider-ovn/commit/c9595bbd450528b969af75870fa38365929dc186
     @PortMapper.map_to_rest
     def list_ports(self):
-        ports_rows = self.ovn_north.list_lsp()
-        return [self._get_network_port(port_row)
-                for port_row in ports_rows
-                if self._is_port_ovirt_controlled(port_row)]
+        return [self._get_network_port(lsp, ls)
+                for ls in self.ovn_north.list_ls()
+                for lsp in ls.ports
+                if self._is_port_ovirt_controlled(lsp)]
 
     @PortMapper.map_to_rest
     def get_port(self, port_id):
@@ -314,12 +315,28 @@ class NeutronApi(object):
     def _serialize_port(self, port):
         return port
 
-    def _get_network_port(self, lsp):
-        ls = self._get_port_network(lsp)
-        dhcp_options = self.ovn_north.get_dhcp(lsp_id=lsp.uuid)
+    # ICDC Fix: https://github.com/oVirt/ovirt-provider-ovn/commit/c9595bbd450528b969af75870fa38365929dc186
+    def _get_network_port(self, lsp, ls=None):
+        if ls is None:
+            ls = self._get_port_network(lsp)
+        # ICDC Fix: https://github.com/oVirt/ovirt-provider-ovn/commit/aef7600fd2dac32b40ca64fac5794703ee437938
+        dhcp_options = self._get_dhcp(lsp, ls)
         lrp_name = lsp.options.get(ovnconst.LSP_OPTION_ROUTER_PORT)
         lrp = self.ovn_north.get_lrp(lrp_name=lrp_name) if lrp_name else None
         return NetworkPort(lsp=lsp, ls=ls, dhcp_options=dhcp_options, lrp=lrp)
+
+    # ICDC Fix: https://github.com/oVirt/ovirt-provider-ovn/commit/aef7600fd2dac32b40ca64fac5794703ee437938
+    def _get_dhcp(self, lsp, ls):
+        dhcp_id = None
+        if lsp.dhcpv4_options:
+            dhcp_id = lsp.dhcpv4_options[0].uuid
+        if lsp.dhcpv6_options:
+            dhcp_id = lsp.dhcpv6_options[0].uuid
+
+        if dhcp_id:
+            return self.ovn_north.get_dhcp(dhcp_id=dhcp_id)
+        else:
+            return self.ovn_north.get_dhcp(ls_id=ls.uuid)
 
     @PortMapper.validate_add
     @PortMapper.map_from_rest
